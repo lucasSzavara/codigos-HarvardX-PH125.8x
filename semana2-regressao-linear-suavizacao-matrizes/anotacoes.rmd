@@ -1,0 +1,49 @@
+---
+title: "Anotações sobre regressão linear"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(HistData)
+```
+
+Regressão linear é muito rígida e limitada para a maior parte das aplicações reais, mas pode ser usada como um método
+de baseline. Para relacionar regressão linear com ML, podemos reformular o problema das alturas de galton para prever
+a altura do filho a partir da altura do pai:
+```{r}
+galton_heights <- GaltonFamilies %>%
+  filter(childNum == 1 & gender == "male") %>%
+  select(father, childHeight) %>%
+  rename(son = childHeight)
+```
+
+Dividir entre dataset de teste e treino:
+```{r}
+library(caret)
+y <- galton_heights$son
+test_index <- createDataPartition(y, times = 1, p = 0.5, list = FALSE)
+
+train_set <- galton_heights %>% slice(-test_index)
+test_set <- galton_heights %>% slice(test_index)
+```
+Podemos criar um baseline prevendo sempre a média das altuas do filho:
+```{r}
+avg <- mean(train_set$son)
+avg
+```
+Que tem como MSE:
+```{r}
+mean((avg - test_set$son)^2)
+```
+Se tentarmos criar um modelo por Regressão linear, temos:
+```{r}
+fit <- lm(son ~ father, data = train_set)
+fit$coef
+```
+Que tem como MSE:
+```{r}
+y_hat <- predict(fit, test_set)
+mean((y_hat - test_set$son)^2)
+```
+Logo, vemos que uma regressão linear tem maior taxa de acerto do que sempre prever a média
