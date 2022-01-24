@@ -46,4 +46,69 @@ Que tem como MSE:
 y_hat <- predict(fit, test_set)
 mean((y_hat - test_set$son)^2)
 ```
-Logo, vemos que uma regressão linear tem maior taxa de acerto do que sempre prever a média
+Logo, vemos que uma regressão linear tem maior taxa de acerto do que sempre prever a média.
+
+Regressão também pode ser usada para variáveis categóricas. Por exemplo, podemos ilustrar isso usando a predição de
+Homem/Mulher baseado na altura que usamos na última semana:
+```{r}
+library(dslabs)
+data('heights')
+```
+```{r}
+y <- heights$sex
+test_index <- createDataPartition(y, times = 1, p = 0.5, list = FALSE)
+test_set <- heights %>% slice(test_index)
+train_set <- heights %>% slice(-test_index)
+```
+Dado Y = 0 para Homem e Y = 1 para Mulher, com X sendo a altura, estamos interessados em calcular a probabilidade
+condicional de ser mulher a partir da altura. Ou seja: P(Y = 1 | X = x).
+Como um exemplo, podemos prever a probabilidade de um estudante com 66 polegadas de altura ser Mulher:
+```{r}
+train_set %>% filter(round(height) == 66) %>% summarize(probabilidade=mean(sex=='Female'))
+```
+Podemos repetir isso para diversos valores e plotar essas probabilidades:
+```{r}
+heights %>%
+  mutate(x=round(height)) %>%
+  group_by(x) %>%
+  filter(n() >= 10) %>%  # Apenas as alturas com pelo menos 10 pessoas
+  summarize(probabilidade=mean(sex=='Female')) %>%
+  ggplot(aes(x, probabilidade)) +
+        geom_point()
+```
+Como vemos uma relação próxima da linear (e foi a única até esse momento do curso) podemos criar um modelo linear:
+```{r}
+lm_fit <- mutate(train_set, y=as.numeric(sex=='Female')) %>% lm(y ~ height, data=.)
+p_hat <- predict(lm_fit, test_set)
+y_hat <- ifelse(p_hat > 0.5, 'Female', 'Male') %>% factor()
+confusionMatrix(y_hat, test_set$sex)
+```
+Por enquanto vamos ignorar a baixa sensitividade do modelo e vamos focar em outro ponto. A regressão linear nos retorna
+uma função linear definida para qualquer X e com resultados variando entre -infinito e infinito. Para corrigir isso,
+podemos usar uma [transformação logística](https://medium.com/analytics-vidhya/logistic-regression-part-i-transformation-of-linear-to-logistic-395cb539038b)
+Outro ponto interessante, é que não podemos usar o MSE como método para ajustar o modelo, uma vez que a saída da
+transformação será categórica. Dessa forma, usamos [Maximum Likelihood Estimates (MLE)](https://towardsdatascience.com/probability-concepts-explained-maximum-likelihood-estimation-c7b4342fdbb1)
+```{r}
+glm_fit <- train_set %>%
+  mutate(y = as.numeric(sex == "Female")) %>%
+  glm(y ~ height, data=., family = "binomial")
+
+p_hat_logit <- predict(glm_fit, newdata = test_set, type = "response")
+tmp <- heights %>%
+  mutate(x = round(height)) %>%
+  group_by(x) %>%
+  filter(n() >= 10) %>%
+  summarize(prop = mean(sex == "Female"))
+logistic_curve <- data.frame(x = seq(min(tmp$x), max(tmp$x))) %>%
+  mutate(p_hat = plogis(glm_fit$coef[1] + glm_fit$coef[2]*x))
+tmp %>%
+  ggplot(aes(x, prop)) +
+  geom_point() +
+  geom_line(data = logistic_curve, mapping = aes(x, p_hat), lty = 2)
+```
+```{r}
+y_hat_logit <- ifelse(p_hat_logit > 0.5, "Female", "Male") %>% factor
+confusionMatrix(y_hat_logit, test_set$sex)
+```
+Vemos que o resultado usando a transformação logística melhorou levemente nossos resultados, mas essencialmente
+manteve o mesmo padrão da regressão linear.
