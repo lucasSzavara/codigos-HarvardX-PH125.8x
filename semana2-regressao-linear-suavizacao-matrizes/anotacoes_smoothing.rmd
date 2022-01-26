@@ -1,0 +1,62 @@
+---
+title: "Smoothing"
+output: html_document
+---
+
+Em grande parte dos problemas de machine learning os dados são apresentados com alguma forma de ruído, que dificulta
+a análise do padrão real. Para resolver isso, consideramos que os padrões de dados são suaves, e que
+podem ser consideradas constantes para uma pequena variação de x.
+
+Como exemplo podemos fazer uma suavização dos dados da eleição de 2008 dos EUA
+```{r}
+library(tidyverse)
+library(dslabs)
+library(ggplot2)
+data("polls_2008")
+qplot(day, margin, data = polls_2008)
+```
+Se considerarmos o período de uma semana como um bom período para que a tendência seja constante:
+```{r}
+span <- 7
+fit <- with(polls_2008, ksmooth(day, margin, x.points = day, kernel = 'box', bandwidth = span))
+polls_2008 %>% mutate(smooth=fit$y) %>%
+        ggplot(aes(day, margin)) +
+        geom_line(color='grey') +
+        geom_line(aes(day, smooth), color='red')
+```
+Vemos que apesar da suavização realmente diminuir o ruído, ele ainda está presente. Por isso existem diversas formas
+de suavização, chamados de kernel. Como nesse exemplo, a cada mudança de x, 2 pontos de 7 são modificados, a variância
+ainda é grande, isso pode ser corrigido diminuindo a importância de pontos distantes do centro, usando um kernel como
+o gaussiano:
+```{r}
+span <- 7
+fit_gaussian <- with(polls_2008, ksmooth(day, margin,  x.points = day, kernel="normal", bandwidth = span))
+polls_2008 %>% mutate(smooth = fit$y, smooth_gaussian = fit_gaussian$y) %>%
+  ggplot(aes(day, margin)) +
+  geom_line(color = "grey") +
+  geom_line(aes(day, smooth), color="red")+
+  geom_line(aes(day, smooth_gaussian), color="blue")
+```
+Vemos que essa forma de suavização de fato diminuiu bastante o ruído quando comparada com o método por caixa. Embora
+em alguns intervalos ainda seja muito influenciada por pontos outliers (de -125 até -75, por exemplo).
+
+Isso ocorre em grande parte por que, por considerarmos que a tendência é constante em pequenos intervalos, só podemos
+usar intervalos pequenos. Mas, pelo teorema de Taylor, sabemos que funções suaves podem ser aproximadas por funções
+lineares em pequenos intervalos. Isso nos permite usar um intervalo maior do que podemos usar para o método anterior,
+resultando em uma curva de tendência ainda mais suave:
+```{r}
+polls_2008 %>% ggplot(aes(day, margin)) +
+  geom_point() +
+  geom_smooth(color="red", span = 0.25, method = "loess", method.args = list(degree=1))
+```
+Esse método é chamado de Local weighted regression (loess) e uma diferença importante é que ao invés de considerar um
+intervalo no X, esse método considera uma quantidade fixa de pontos para cada X. Dessa forma, se o span é 0.5, esse
+método irá considerar os N/2 pontos mais próximos de X. Outras diferenças importantes são o uso de um kernel diferente,
+o Tukey's tri-cube, que tem como característica um topo mais achatado que é usado como peso no método dos mínimos
+quadrados, e que esse modelo tem out-of-the-box uma opção de diminuir o peso de outliers:
+```{r}
+polls_2008 %>% ggplot(aes(day, margin)) +
+  geom_point() +
+  geom_smooth(color="red", span = 0.25, method = "loess", method.args = list(degree=1, family='symmetric'))
+```
+
